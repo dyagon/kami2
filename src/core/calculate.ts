@@ -1,5 +1,5 @@
 import { getNeighbors } from './draw'
-import type { Cell } from './Cell'
+import type { Cell } from '../components/Cell'
 import { UnionFind } from './UnionFind'
 import { ROWS, COLS, TOTAL_CELLS } from './constants'
 

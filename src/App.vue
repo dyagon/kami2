@@ -1,27 +1,13 @@
 <template>
   <div class="game-container">
     <!-- 左侧：游戏区域，高度占满 -->
-    <div class="board-wrapper">
-        <svg
-          class="game-svg"
-          :viewBox="`0 0 ${BOARD_WIDTH} ${BOARD_HEIGHT}`"
-          preserveAspectRatio="xMidYMid meet"
-        >
-          <g v-for="(col, c) in grid" :key="c">
-            <polygon
-              v-for="(cell, r) in col"
-              :key="`${c}-${r}`"
-              :points="getTrianglePoints(c, r)"
-              :fill="cell.color"
-              stroke="#fff"
-              stroke-width="1"
-              class="triangle-cell"
-              @click="handleCellClick(c, r)"
-              @mouseenter="handleCellEnter(c, r)"
-            />
-          </g>
-        </svg>
-    </div>
+    <GameBoard
+      :rows="ROWS"
+      :cols="COLS"
+      :grid="grid"
+      @update:grid="grid = $event"
+      @step="stepCount++"
+    />
 
     <!-- 右侧：状态 + 控制 统一放一起 -->
     <aside class="right-sidebar">
@@ -55,28 +41,38 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
-import { getTrianglePoints, getNeighbors } from './core/draw'
+import { ref, computed, provide, onMounted, onUnmounted } from 'vue'
 import { buildGameState } from './core/calculate'
-import type { Cell } from './core/Cell'
+import type { Cell } from './components/Cell'
+import GameBoard from './components/GameBoard.vue'
 import {
   ROWS,
   COLS,
   COLORS,
   BASE_COLOR,
-  BOARD_WIDTH,
-  BOARD_HEIGHT,
 } from './core/constants'
 
-// 状态
+// 全局状态
 const mode = ref<'EDIT' | 'PLAY'>('EDIT')
 const selectedColor = ref<(typeof COLORS)[number]>(COLORS[0])
-const stepCount = ref(0)
-const grid = ref<Cell[][]>([])
 const spaceHeld = ref(false) // 按住空格时，鼠标经过的格子都上色
 
-// 联通区域数（随 grid 变化）
-const regionCount = computed(() => buildGameState(grid.value).count)
+// 通过 provide 提供全局状态
+provide('gameMode', mode)
+provide('selectedColor', selectedColor)
+provide('spaceHeld', spaceHeld)
+
+// 游戏状态
+const stepCount = ref(0)
+const grid = ref<Cell[][]>([])
+
+// 联通区域数（仅在游戏模式下计算）
+const regionCount = computed(() => {
+  if (mode.value === 'EDIT') {
+    return '-'
+  }
+  return buildGameState(grid.value).count
+})
 
 // --- 3. 初始化 ---
 const initGrid = () => {
@@ -116,63 +112,6 @@ onUnmounted(() => {
   globalThis.removeEventListener('keydown', onKeyDown)
   globalThis.removeEventListener('keyup', onKeyUp)
 })
-
-const paintCell = (c: number, r: number) => {
-  grid.value[c][r].color = selectedColor.value
-}
-
-const handleCellEnter = (c: number, r: number) => {
-  if (mode.value === 'EDIT' && spaceHeld.value) {
-    paintCell(c, r)
-  }
-}
-
-const handleCellClick = (c: number, r: number) => {
-  const targetColor = grid.value[c][r].color
-  const newColor = selectedColor.value
-
-  if (mode.value === 'EDIT') {
-    paintCell(c, r)
-  } else {
-    if (targetColor === newColor) return
-    floodFill(c, r, targetColor, newColor)
-    stepCount.value++
-  }
-}
-
-const floodFill = (
-  startC: number,
-  startR: number,
-  oldColor: string,
-  newColor: string
-) => {
-  const queue = [{ r: startR, c: startC }]
-  const visited = new Set<string>()
-
-  grid.value[startC][startR].color = newColor
-  visited.add(`${startR},${startC}`)
-
-  while (queue.length > 0) {
-    const curr = queue.shift()!
-    const neighbors = getNeighbors(curr.r, curr.c)
-
-    for (const n of neighbors) {
-      const nKey = `${n.r},${n.c}`
-      if (visited.has(nKey)) continue
-
-      // 边界检查：确保坐标在有效范围内
-      if (n.c < 0 || n.c >= COLS || n.r < 0 || n.r >= ROWS) continue
-      if (!grid.value[n.c] || !grid.value[n.c][n.r]) continue
-
-      const cell = grid.value[n.c][n.r]
-      if (cell.color === oldColor) {
-        cell.color = newColor
-        visited.add(nKey)
-        queue.push(n)
-      }
-    }
-  }
-}
 </script>
 
 <style scoped>
@@ -185,22 +124,6 @@ const floodFill = (
   overflow: hidden;
 }
 
-/* 左侧游戏区域：占满剩余宽度与整屏高度 */
-.board-wrapper {
-  flex: 1;
-  min-width: 0;
-  height: 100%;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  background: #e8e8e8;
-}
-
-.game-svg {
-  width: 100%;
-  height: 100%;
-  display: block;
-}
 
 /* 右侧：状态 + 控制，统一一列 */
 .right-sidebar {
@@ -253,13 +176,6 @@ const floodFill = (
   transform: scale(1.1);
 }
 
-.triangle-cell {
-  cursor: pointer;
-  transition: fill 0.2s;
-}
-.triangle-cell:hover {
-  opacity: 0.9;
-}
 
 .edit-tip {
   font-size: 0.9rem;
