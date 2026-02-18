@@ -1,7 +1,7 @@
 // UnionFind.ts
 export class UnionFind {
-    // parent[i] 存储节点 i 的父节点索引
-    private parent: number[];
+    // parent[i] 存储节点 i 的父节点索引（public 以便在 Pinia 等响应式上下文中保持类型完整）
+    parent: number[];
     // count 存储当前连通分量的总数 (即区域数量)
     public count: number;
   
@@ -37,6 +37,14 @@ export class UnionFind {
     // 判断两个节点是否连通
     isConnected(p: number, q: number): boolean {
       return this.find(p) === this.find(q);
+    }
+
+    /** 深拷贝，用于 DFS 回溯时恢复状态 */
+    clone(): UnionFind {
+      const uf = new UnionFind(0)
+      uf.parent = this.parent.slice()
+      uf.count = this.count
+      return uf
     }
   }
   

@@ -52,10 +52,10 @@ const boardHeight = computed(() => props.grid?.height ?? 0)
 // 获取 gameGrid
 const gameGrid = computed(() => props.grid)
 
-// 获取 cell 的颜色字符串
+// 获取 cell 的颜色字符串（颜色表来自全局 paletteColors）
 const getCellColor = (c: number, r: number): string => {
   if (!gameGrid.value) return '#fff'
-  return gameGrid.value.getColorAt(r, c)
+  return gameGrid.value.getColorAt(r, c, gameStore.paletteColors)
 }
 
 // 获取 cell 的边框颜色
@@ -108,37 +108,12 @@ const handleCellEnter = (c: number, r: number) => {
 const floodFill = (
   startC: number,
   startR: number,
-  oldColorIndex: number,
+  _oldColorIndex: number,
   newColorIndex: number
 ) => {
   if (!gameGrid.value) return
   const newGameGrid = gameGrid.value.clone()
-  const grid = newGameGrid.grid
-  const queue = [{ r: startR, c: startC }]
-  const visited = new Set<string>()
-
-  grid[startC][startR] = newColorIndex
-  visited.add(`${startR},${startC}`)
-
-  while (queue.length > 0) {
-    const curr = queue.shift()!
-    const neighbors = newGameGrid.getNeighbors(curr.r, curr.c)
-
-    for (const n of neighbors) {
-      const nKey = `${n.r},${n.c}`
-      if (visited.has(nKey)) continue
-
-      if (n.c < 0 || n.c >= gameGrid.value!.cols || n.r < 0 || n.r >= gameGrid.value!.rows) continue
-      if (grid[n.c]?.[n.r] === undefined) continue
-
-      if (grid[n.c][n.r] === oldColorIndex) {
-        grid[n.c][n.r] = newColorIndex
-        visited.add(nKey)
-        queue.push(n)
-      }
-    }
-  }
-
+  newGameGrid.floodFill(startR, startC, newColorIndex)
   emit('update:grid', newGameGrid)
 }
 
