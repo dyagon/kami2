@@ -1,13 +1,28 @@
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
+import { ref, computed, markRaw } from 'vue'
 import { GameGrid, type Solution } from '../core/GameGrid'
+import { GraphSolver } from '../core/GraphSolver'
 
 // 初始化网格所需常量
 export const VSIDE_ROWS = 14
 export const COLS = 10
-export const COLORS = ['#FF6B6B', '#4ECDC4', '#FFE66D', '#1A535C', '#F7FFF7'] as const
+/** 编辑模式下默认颜色数量（可增删，至少 1 个） */
+export const DEFAULT_COLORS = ['#FF6B6B', '#4ECDC4', '#FFE66D'] as const
+/** 向后兼容：若 grid 未加载则 fallback */
+export const COLORS = DEFAULT_COLORS
 
 const EDIT_STORAGE_KEY = 'kami2-edit-grid'
+
+const PRESET_COLORS = [
+  '#FF6B6B', '#4ECDC4', '#FFE66D', '#1A535C', '#F7FFF7',
+  '#95E1D3', '#F38181', '#AA96DA', '#FCBAD3', '#A8D8EA'
+]
+
+function randomNewColor(existing: readonly string[]): string {
+  const pool = PRESET_COLORS.filter(c => !existing.includes(c))
+  if (pool.length > 0) return pool[Math.floor(Math.random() * pool.length)]
+  return '#' + Math.floor(Math.random() * 0xffffff).toString(16).padStart(6, '0')
+}
 
 export const useGameStore = defineStore('game', () => {
   // 游戏模式：EDIT 编辑 / PLAY 测试
@@ -15,6 +30,9 @@ export const useGameStore = defineStore('game', () => {
 
   // 颜色选择（使用索引）
   const selectedColorIndex = ref<number>(0)
+
+  /** 调色板颜色表（全局状态），与 gameGrid.colorCount 一致；grid 中索引对应此数组下标 */
+  const paletteColors = ref<string[]>([])
 
   // 空格键状态
   const spaceHeld = ref(false)
@@ -42,28 +60,32 @@ export const useGameStore = defineStore('game', () => {
   
   // 获取当前选中的颜色字符串（用于向后兼容）
   const selectedColor = computed(() => {
-    if (!gameGrid.value) return COLORS[0]
-    return gameGrid.value.colors[selectedColorIndex.value] || COLORS[0]
+    const pal = paletteColors.value
+    if (!pal.length) return DEFAULT_COLORS[0]
+    return pal[selectedColorIndex.value] ?? pal[0]
   })
-  
-  /** 从 localStorage 读取编辑状态，无效或不存在返回 null */
+
+  /** 从 localStorage 读取编辑状态，无效或不存在返回 null；会设置 paletteColors */
   const loadEditState = (): GameGrid | null => {
     try {
       const raw = localStorage.getItem(EDIT_STORAGE_KEY)
       if (!raw) return null
-      const data = JSON.parse(raw) as { rows: number; cols: number; colors: string[]; grid: number[][] }
-      if (!data?.grid?.length || !data?.colors?.length) return null
+      const data = JSON.parse(raw) as { rows: number; cols: number; colors?: string[]; colorCount?: number; grid: number[][] }
+      if (!data?.grid?.length) return null
+      const colors = data.colors && data.colors.length > 0 ? data.colors : [...DEFAULT_COLORS]
+      paletteColors.value = colors
       return GameGrid.fromJSON(data)
     } catch {
       return null
     }
   }
 
-  /** 将当前编辑状态写入 localStorage（仅在编辑模式且有 grid 时） */
+  /** 将当前编辑状态写入 localStorage（含调色板与 grid） */
   const saveEditState = () => {
     if (mode.value !== 'EDIT' || !gameGrid.value) return
     try {
-      localStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(gameGrid.value.toJSON()))
+      const payload = { ...gameGrid.value.toJSON(), colors: paletteColors.value }
+      localStorage.setItem(EDIT_STORAGE_KEY, JSON.stringify(payload))
     } catch {
       // ignore
     }
@@ -73,7 +95,7 @@ export const useGameStore = defineStore('game', () => {
   const loadEditStateOrInit = () => {
     const loaded = loadEditState()
     if (loaded) {
-      gameGrid.value = loaded
+      gameGrid.value = markRaw(loaded)
       stepCount.value = 0
       selectedStepIndex.value = null
       highlightCells.value = []
@@ -97,16 +119,14 @@ export const useGameStore = defineStore('game', () => {
   }
   
   const setSelectedColorIndex = (index: number) => {
-    if (gameGrid.value && index >= 0 && index < gameGrid.value.colors.length) {
+    if (index >= 0 && index < paletteColors.value.length) {
       selectedColorIndex.value = index
     }
   }
-  
+
   const setSelectedColor = (color: string) => {
-    const index = gameGrid.value?.colors.indexOf(color)
-    if (index !== undefined && index >= 0) {
-      selectedColorIndex.value = index
-    }
+    const index = paletteColors.value.indexOf(color)
+    if (index >= 0) selectedColorIndex.value = index
   }
   
   const setSpaceHeld = (held: boolean) => {
@@ -114,10 +134,52 @@ export const useGameStore = defineStore('game', () => {
   }
   
   const setGameGrid = (newGameGrid: GameGrid) => {
-    gameGrid.value = newGameGrid
+    gameGrid.value = markRaw(newGameGrid)
     saveEditState()
   }
-  
+
+  /** 编辑模式下增加一种颜色（测试模式不可用） */
+  const addColor = () => {
+    if (mode.value !== 'EDIT' || !gameGrid.value) return
+    const pal = paletteColors.value
+    paletteColors.value = [...pal, randomNewColor(pal)]
+    const newGrid = new GameGrid(
+      gameGrid.value.vside_rows,
+      gameGrid.value.cols,
+      paletteColors.value.length,
+      gameGrid.value.grid.map(col => [...col])
+    )
+    gameGrid.value = markRaw(newGrid)
+    saveEditState()
+  }
+
+  /** 编辑模式下删除一种颜色，至少保留 1 个（测试模式不可用） */
+  const removeColor = (index: number) => {
+    if (mode.value !== 'EDIT' || !gameGrid.value) return
+    const pal = paletteColors.value
+    if (pal.length <= 1 || index < 0 || index >= pal.length) return
+    paletteColors.value = pal.filter((_, i) => i !== index)
+    const remap = (v: number): number => {
+      if (v === index) return 0
+      if (v > index) return v - 1
+      return v
+    }
+    const grid = gameGrid.value.grid.map(col => col.map(remap))
+    const newGrid = new GameGrid(
+      gameGrid.value.vside_rows,
+      gameGrid.value.cols,
+      paletteColors.value.length,
+      grid
+    )
+    gameGrid.value = markRaw(newGrid)
+    if (selectedColorIndex.value >= paletteColors.value.length) {
+      selectedColorIndex.value = paletteColors.value.length - 1
+    } else if (selectedColorIndex.value > index) {
+      selectedColorIndex.value--
+    }
+    saveEditState()
+  }
+
   const incrementStepCount = () => {
     stepCount.value++
   }
@@ -126,9 +188,10 @@ export const useGameStore = defineStore('game', () => {
     stepCount.value = 0
   }
   
-  // 初始化网格（重置画布）
+  // 初始化网格（重置画布，默认 3 色）
   const initGrid = () => {
-    gameGrid.value = new GameGrid(VSIDE_ROWS, COLS, COLORS)
+    paletteColors.value = [...DEFAULT_COLORS]
+    gameGrid.value = markRaw(new GameGrid(VSIDE_ROWS, COLS, paletteColors.value.length))
     stepCount.value = 0
     selectedStepIndex.value = null
     highlightCells.value = []
@@ -159,17 +222,26 @@ export const useGameStore = defineStore('game', () => {
     isBlinking.value = false
     
     // 保存当前 gameGrid 状态作为求解的初始状态
-    initialGameGridForSolution.value = gameGrid.value.clone()
+    initialGameGridForSolution.value = markRaw(gameGrid.value.clone())
     
-    // 使用setTimeout让UI更新，然后执行求解
+    // 使用 setTimeout 让 UI 更新，然后使用 GraphSolver 求解
     const grid = gameGrid.value
+    const colors = paletteColors.value
     setTimeout(() => {
       try {
-        const result = grid?.solve() ?? null
+        if (!grid) {
+          solution.value = null
+          return
+        }
+        const graphSolver = new GraphSolver(grid)
+        const graphResult = graphSolver.solve(15)
+        const result: Solution | null = graphResult
+          ? graphSolver.toSolution(graphResult.path, colors)
+          : null
         solution.value = result
-        
+
         if (result) {
-          console.log('=== 求解结果 ===')
+          console.log('=== 求解结果 (GraphSolver) ===')
           console.log(`最少步骤数：${result.steps}`)
           console.log('解决方案：')
           result.path.forEach((step, index) => {
@@ -261,7 +333,8 @@ export const useGameStore = defineStore('game', () => {
     // State
     mode,
     selectedColorIndex,
-    selectedColor, // 计算属性，向后兼容
+    selectedColor,
+    paletteColors,
     spaceHeld,
     gameGrid,
     stepCount,
@@ -280,6 +353,8 @@ export const useGameStore = defineStore('game', () => {
     setSelectedColor,
     setSpaceHeld,
     setGameGrid,
+    addColor,
+    removeColor,
     incrementStepCount,
     resetStepCount,
     initGrid,

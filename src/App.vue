@@ -96,7 +96,7 @@ onUnmounted(() => {
 
 /* 右侧：状态 + 控制，统一一列 */
 .right-sidebar {
-  width: 200px;
+  width: 300px;
   flex-shrink: 0;
   height: 100%;
   display: flex;
