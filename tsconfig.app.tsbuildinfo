@@ -1,1 +1,1 @@
-{"root":["./src/main.ts","./src/vite-env.d.ts","./src/core/gamegrid.ts","./src/core/unionfind.ts","./src/stores/gamestore.ts","./src/app.vue","./src/components/colorpalette.vue","./src/components/gameboard.vue","./src/components/solverpanel.vue"],"version":"5.6.3"}
+{"root":["./src/main.ts","./src/vite-env.d.ts","./src/core/gamegrid.ts","./src/core/graphsolver.ts","./src/core/unionfind.ts","./src/stores/gamestore.ts","./src/app.vue","./src/components/colorpalette.vue","./src/components/gameboard.vue","./src/components/solverpanel.vue"],"version":"5.6.3"}
