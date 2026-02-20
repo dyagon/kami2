@@ -1,61 +1,80 @@
 <template>
   <div class="game-container">
-    <!-- 左侧：游戏区域，高度占满 -->
-    <GameBoard
-      v-if="gameStore.gameGrid"
-      :rows="gameStore.gameGrid.rows"
-      :cols="gameStore.gameGrid.cols"
-      :grid="gameStore.gameGrid"
-      :highlight-cells="gameStore.highlightCells"
-      @update:grid="gameStore.setGameGrid($event)"
-      @step="gameStore.incrementStepCount()"
-    />
-
-    <!-- 右侧：状态 + 控制 统一放一起 -->
-    <aside class="right-sidebar">
-      <div class="controls">
-        <div class="mode-switch">
-          <button
-            type="button"
-            class="mode-btn"
-            :class="{ active: gameStore.mode === 'EDIT' }"
-            @click="handleModeChange('EDIT')"
-          >
-            编辑
-          </button>
-          <button
-            type="button"
-            class="mode-btn"
-            :class="{ active: gameStore.mode === 'PLAY' }"
-            @click="handleModeChange('PLAY')"
-          >
-            测试
-          </button>
-        </div>
-        <ColorPalette />
-        <span v-if="gameStore.mode === 'EDIT'" class="edit-tip"
-          >编辑时按住空格 + 移动鼠标可连续上色</span
-        >
-        <button v-if="gameStore.mode === 'PLAY'" @click="resetGrid">
-          重置网格
-        </button>
-        <div v-if="gameStore.mode === 'PLAY'" class="status-panel">
-          <div class="status-item">测试步数：{{ gameStore.stepCount }}</div>
-        </div>
-        <SolverPanel />
+    <!-- 游戏区域 + 侧边栏 组合居中，中间无间隙 -->
+    <div class="game-main">
+      <div
+        class="board-area"
+        :style="boardAreaStyle"
+      >
+        <GameBoard
+          v-if="gameStore.gameGrid"
+          :rows="gameStore.gameGrid.rows"
+          :cols="gameStore.gameGrid.cols"
+          :grid="gameStore.gameGrid"
+          :highlight-cells="gameStore.highlightCells"
+          @update:grid="gameStore.setGameGrid($event)"
+          @step="gameStore.incrementStepCount()"
+        />
       </div>
-    </aside>
+
+      <!-- 右侧：状态 + 控制，可滚动 -->
+      <aside class="right-sidebar">
+        <div class="controls">
+          <div class="mode-switch">
+            <button
+              type="button"
+              class="mode-btn"
+              :class="{ active: gameStore.mode === 'EDIT' }"
+              @click="handleModeChange('EDIT')"
+            >
+              编辑
+            </button>
+            <button
+              type="button"
+              class="mode-btn"
+              :class="{ active: gameStore.mode === 'PLAY' }"
+              @click="handleModeChange('PLAY')"
+            >
+              测试
+            </button>
+          </div>
+          <ColorPalette />
+          <GraphInfoPanel />
+          <span v-if="gameStore.mode === 'EDIT'" class="edit-tip"
+            >编辑时按住空格 + 移动鼠标可连续上色</span
+          >
+          <button v-if="gameStore.mode === 'PLAY'" @click="resetGrid">
+            重置网格
+          </button>
+          <div v-if="gameStore.mode === 'PLAY'" class="status-panel">
+            <div class="status-item">测试步数：{{ gameStore.stepCount }}</div>
+          </div>
+          <SolverPanel />
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, onUnmounted } from "vue";
+import { onMounted, onUnmounted, computed } from "vue";
 import { useGameStore } from "./stores/gameStore";
+import { TRI_H } from "./core/GameGrid";
 import GameBoard from "./components/GameBoard.vue";
 import ColorPalette from "./components/ColorPalette.vue";
+import GraphInfoPanel from "./components/GraphInfoPanel.vue";
 import SolverPanel from "./components/SolverPanel.vue";
 
 const gameStore = useGameStore();
+
+const boardAreaStyle = computed(() => {
+  const g = gameStore.gameGrid;
+  if (!g) return {};
+  return {
+    width: `${g.cols * TRI_H}px`,
+    height: `${g.height}px`,
+  };
+});
 
 const resetGrid = () => {
   gameStore.loadEditStateOrInit();
@@ -109,19 +128,39 @@ onUnmounted(() => {
 <style scoped>
 .game-container {
   display: flex;
-  flex-direction: row;
+  justify-content: center;
+  align-items: center;
   font-family: sans-serif;
   height: 100vh;
   box-sizing: border-box;
   overflow: hidden;
 }
 
+/* 游戏 Board + 侧边栏 组合，中间无间隙，整体居中，高度随内容 */
+.game-main {
+  display: flex;
+  flex-direction: row;
+  flex-shrink: 0;
+  align-items: flex-start;
+  gap: 0;
+}
+
+.board-area {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #e8e8e8;
+  overflow: hidden;
+  align-self: center;
+}
+
 /* 右侧：状态 + 控制，统一一列，内容过长可滚动 */
 .right-sidebar {
   width: 320px;
   flex-shrink: 0;
-  height: 100%;
-  min-height: 0; /* flex 子项才能正确收缩并出现滚动 */
+  max-height: 100vh;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   padding: 20px;
