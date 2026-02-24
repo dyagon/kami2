@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: vue-app-deployment
+  labels:
+    app: vue-app
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: vue-app
+  template:
+    metadata:
+      labels:
+        app: vue-app
+    spec:
+      containers:
+      - name: vue-app
+        # 重点：使用本地仓库地址，OrbStack 会自动解析
+        image: localhost:5000/vue-app:latest
+        # 重点：每次都强制拉取新镜像，避免缓存导致不更新
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: vue-app-service
+spec:
+  selector:
+    app: vue-app
+  ports:
+    - protocol: TCP
+      port: 8888
+      targetPort: 80
+  # 使用 LoadBalancer，OrbStack 会自动分配一个 localhost URL 给你访问
+  type: LoadBalancer
