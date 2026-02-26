@@ -17,9 +17,12 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true,
     "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "paths": { "@/*": ["./src/*"] }
   },
-  "include": ["src/**/*.ts", "src/**/*.tsx", "src/**/*.vue"]
+  "include": [
+    "apps/**/src/**/*.ts",
+    "apps/**/src/**/*.tsx",
+    "apps/**/src/**/*.vue",
+    "apps/**/vite-env.d.ts"
+  ]
 }
