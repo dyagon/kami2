@@ -2,19 +2,19 @@
     "rewrites": [
       {
         "source": "/kami2",
-        "destination": "https://puzzles-kami2.vercel.app/kami2/"
+        "destination": "https://dyagon-puzzles-kami2.vercel.app.vercel.app/kami2/"
       },
       {
         "source": "/kami2/:match*",
-        "destination": "https://puzzles-kami2.vercel.app/kami2/:match*"
+        "destination": "https://dyagon-puzzles-kami2.vercel.app.vercel.app/kami2/:match*"
       },
       {
         "source": "/sudoku",
-        "destination": "https://puzzles-sudoku.vercel.app/sudoku/"
+        "destination": "https://dyagon-puzzles-sudoku.vercel.app/sudoku/"
       },
       {
         "source": "/sudoku/:match*",
-        "destination": "https://puzzles-sudoku.vercel.app/sudoku/:match*"
+        "destination": "https://dyagon-puzzles-sudoku.vercel.app/sudoku/:match*"
       }
     ]
   }
