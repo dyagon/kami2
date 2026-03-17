@@ -1,211 +1,460 @@
-<template>
-  <div class="sudoku-app">
-    <h1>{{ t('sudoku.title') }}</h1>
-    <div class="board-wrap">
-      <div class="board" :class="{ 'show-errors': showErrors }">
-        <div
-          v-for="(row, i) in grid"
-          :key="i"
-          class="row"
-          :class="{ 'thick-bottom': (i + 1) % 3 === 0 && i !== 8 }"
-        >
-          <div
-            v-for="(cell, j) in row"
-            :key="j"
-            class="cell"
-            :class="{
-              fixed: cell.fixed,
-              'thick-right': (j + 1) % 3 === 0 && j !== 8,
-              error: showErrors && cell.value && !isValid(i, j),
-            }"
-          >
-            <input
-              v-if="!cell.fixed"
-              v-model.number="cell.value"
-              type="number"
-              min="1"
-              max="9"
-              class="input"
-              @input="onInput($event, i, j)"
-            />
-            <span v-else class="fixed-num">{{ cell.value }}</span>
-          </div>
-        </div>
-      </div>
-    </div>
-    <div class="actions">
-      <button type="button" @click="reset">{{ t('sudoku.reset') }}</button>
-      <label class="toggle">
-        <input v-model="showErrors" type="checkbox" />
-        {{ t('sudoku.showErrors') }}
-      </label>
-    </div>
-  </div>
-</template>
-
 <script setup lang="ts">
-import { ref, reactive } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { onBeforeUnmount, onMounted } from 'vue'
+import SudokuBoard from './components/SudokuBoard.vue'
+import SudokuNumpad from './components/SudokuNumpad.vue'
+import { useSudokuGame } from './composables/useSudokuGame'
+import type { Difficulty } from './types/sudoku'
 
-interface Cell {
-  value: number | null
-  fixed: boolean
-}
+const levels: Difficulty[] = ['easy', 'medium', 'hard']
 
-const { t } = useI18n()
+const game = useSudokuGame()
+const {
+  applyValue,
+  cancelSolve,
+  cellViewModels,
+  clearSelected,
+  difficulty,
+  dispose,
+  filledCells,
+  formatTime,
+  initGame,
+  isSolving,
+  mistakes,
+  newGame,
+  onKeyDown,
+  selectCell,
+  setDifficulty,
+  solveBoard,
+  statusMessage,
+} = game
 
-// 示例：简单初盘（0 表示空格）
-const initial = [
-  [5, 3, 4, 1, 7, 3, 0, 0, 0],
-  [6, 0, 0, 1, 9, 5, 0, 0, 0],
-  [0, 9, 8, 0, 0, 0, 0, 6, 0],
-  [8, 0, 0, 0, 6, 0, 0, 0, 3],
-  [4, 0, 0, 8, 0, 3, 0, 0, 1],
-  [7, 0, 0, 0, 2, 1, 0, 0, 6],
-  [0, 6, 0, 0, 0, 0, 2, 8, 0],
-  [0, 0, 0, 4, 1, 9, 0, 0, 5],
-  [0, 0, 0, 0, 8, 0, 0, 7, 9],
-]
+onMounted(() => {
+  initGame()
+  window.addEventListener('keydown', onKeyDown)
+})
 
-function toGrid(data: number[][]): Cell[][] {
-  return data.map((row) =>
-    row.map((v) => ({ value: v || null, fixed: v !== 0 }))
-  )
-}
-
-const grid = reactive<Cell[][]>(toGrid(initial.map((r) => [...r])))
-const showErrors = ref(false)
-
-function onInput(e: Event, row: number, col: number) {
-  const t = (e.target as HTMLInputElement).value
-  const n = t === '' ? null : parseInt(t, 10)
-  if (n === null || (n >= 1 && n <= 9)) {
-    grid[row][col].value = n
-  } else {
-    ;(e.target as HTMLInputElement).value = String(grid[row][col].value ?? '')
-  }
-}
-
-function getRow(r: number): (number | null)[] {
-  return grid[r].map((c) => c.value)
-}
-function getCol(c: number): (number | null)[] {
-  return grid.map((row) => row[c].value)
-}
-function getBox(r: number, c: number): (number | null)[] {
-  const br = Math.floor(r / 3) * 3
-  const bc = Math.floor(c / 3) * 3
-  const out: (number | null)[] = []
-  for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) out.push(grid[br + i][bc + j].value)
-  return out
-}
-
-function isValid(r: number, c: number): boolean {
-  const v = grid[r][c].value
-  if (v === null) return true
-  const noDup = (arr: (number | null)[]) => {
-    const nums = arr.filter((x): x is number => x !== null)
-    return new Set(nums).size === nums.length
-  }
-  return noDup(getRow(r)) && noDup(getCol(c)) && noDup(getBox(r, c))
-}
-
-function reset() {
-  const data = initial.map((r) => [...r])
-  for (let i = 0; i < 9; i++)
-    for (let j = 0; j < 9; j++) {
-      grid[i][j].value = data[i][j] || null
-      grid[i][j].fixed = data[i][j] !== 0
-    }
-}
+onBeforeUnmount(() => {
+  window.removeEventListener('keydown', onKeyDown)
+  dispose()
+})
 </script>
 
-<style scoped>
-.sudoku-app {
-  min-height: 100vh;
-  padding: 1rem;
+<template>
+  <main class="sudoku-page page-shell">
+    <div class="ambient-shape shape-a" />
+    <div class="ambient-shape shape-b" />
+
+    <section class="game-card">
+      <header class="header">
+        <p class="eyebrow">Vue 3 + TypeScript</p>
+        <h1>Sudoku Atelier</h1>
+        <p class="status">{{ statusMessage }}</p>
+      </header>
+
+      <section class="toolbar">
+        <div class="difficulty-group" role="group" aria-label="Difficulty">
+          <button
+            v-for="level in levels"
+            :key="level"
+            class="chip"
+            :class="{ active: difficulty === level }"
+            :disabled="isSolving"
+            @click="setDifficulty(level)"
+          >
+            {{ level }}
+          </button>
+        </div>
+
+        <div class="toolbar-actions">
+          <button class="new-game" @click="newGame">New Board</button>
+          <button class="solve-button" :disabled="isSolving" @click="solveBoard">
+            {{ isSolving ? 'Solving...' : 'Solve' }}
+          </button>
+          <button class="cancel-button" :disabled="!isSolving" @click="() => cancelSolve()">
+            Cancel
+          </button>
+        </div>
+      </section>
+
+      <section class="metrics" aria-live="polite">
+        <div>
+          <span>Time</span>
+          <strong>{{ formatTime }}</strong>
+        </div>
+        <div>
+          <span>Mistakes</span>
+          <strong>{{ mistakes }}</strong>
+        </div>
+        <div>
+          <span>Progress</span>
+          <strong>{{ filledCells }}/81</strong>
+        </div>
+      </section>
+
+      <SudokuBoard :cells="cellViewModels" @select="selectCell" />
+
+      <SudokuNumpad :disabled="isSolving" @digit="applyValue" @erase="clearSelected" />
+    </section>
+  </main>
+</template>
+
+<style>
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,600;9..144,800&family=Space+Grotesk:wght@400;500;700&display=swap');
+
+.sudoku-page {
+  --bg-ink: #142029;
+  --bg-paper: #f4f7ec;
+  --card: rgba(255, 255, 255, 0.88);
+  --line: #254a61;
+  --line-bold: #0f2f43;
+  --text: #102233;
+  --muted: #4f6270;
+  --accent: #e86c1b;
+  --accent-soft: #ffe6d5;
+  --focus: #0f7f8c;
+}
+
+.sudoku-page,
+.sudoku-page * {
   box-sizing: border-box;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  background: #1a1a2e;
-  color: #eee;
 }
-h1 {
-  margin: 0 0 1rem;
-  font-size: 1.5rem;
+
+.sudoku-page {
+  position: relative;
+  min-height: 100%;
+  padding: 2rem 1rem 2.5rem;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--text);
+  font-family: 'Space Grotesk', sans-serif;
+  background:
+    radial-gradient(1200px 500px at -20% -10%, #8ecdcf 0%, transparent 65%),
+    radial-gradient(900px 500px at 120% 110%, #ffd1b1 0%, transparent 65%),
+    linear-gradient(130deg, var(--bg-paper), #eff7ff 45%, #f5f4e8 100%);
 }
-.board-wrap {
+
+.sudoku-page button {
+  font: inherit;
+}
+
+.sudoku-page .ambient-shape {
+  position: absolute;
+  border-radius: 999px;
+  filter: blur(40px);
+  opacity: 0.35;
+  pointer-events: none;
+}
+
+.sudoku-page .shape-a {
+  width: 380px;
+  height: 380px;
+  background: #59b3b8;
+  top: -140px;
+  left: -120px;
+  animation: floaty 14s ease-in-out infinite;
+}
+
+.sudoku-page .shape-b {
+  width: 300px;
+  height: 300px;
+  background: #f4a675;
+  bottom: -120px;
+  right: -80px;
+  animation: floaty 11s ease-in-out infinite reverse;
+}
+
+.sudoku-page .game-card {
+  width: min(94vw, 760px);
+  padding: 1.25rem;
+  border: 2px solid color-mix(in srgb, var(--line-bold), white 70%);
+  background: var(--card);
+  border-radius: 22px;
+  box-shadow:
+    0 16px 44px rgba(7, 44, 64, 0.15),
+    0 2px 10px rgba(7, 44, 64, 0.08);
+  backdrop-filter: blur(6px);
+  animation: reveal 500ms ease;
+}
+
+.sudoku-page .header {
+  text-align: center;
   margin-bottom: 1rem;
 }
-.board {
-  display: inline-block;
-  border: 2px solid #4a4a6a;
-  border-radius: 4px;
+
+.sudoku-page .eyebrow {
+  margin: 0;
+  color: var(--muted);
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  font-size: 0.75rem;
+}
+
+.sudoku-page h1 {
+  margin: 0.35rem 0;
+  font-family: 'Fraunces', serif;
+  font-size: clamp(1.9rem, 4vw, 2.7rem);
+  line-height: 1;
+}
+
+.sudoku-page .status {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.sudoku-page .toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+  margin-bottom: 0.85rem;
+}
+
+.sudoku-page .difficulty-group {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.sudoku-page .toolbar-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.sudoku-page .chip,
+.sudoku-page .new-game,
+.sudoku-page .solve-button,
+.sudoku-page .cancel-button,
+.sudoku-page .numpad button {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #edf2f5;
+  color: var(--text);
+  font-weight: 700;
+  transition: transform 120ms ease, border-color 180ms ease, background 180ms ease;
+}
+
+.sudoku-page .chip {
+  text-transform: capitalize;
+  padding: 0.45rem 0.9rem;
+}
+
+.sudoku-page .chip.active {
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent), white 35%);
+}
+
+.sudoku-page .new-game {
+  padding: 0.55rem 1rem;
+  background: linear-gradient(90deg, #ffe5d4, #ffc9a3);
+}
+
+.sudoku-page .solve-button,
+.sudoku-page .cancel-button {
+  padding: 0.55rem 1rem;
+}
+
+.sudoku-page .solve-button {
+  background: linear-gradient(90deg, #daf4ff, #bde8ff);
+}
+
+.sudoku-page .cancel-button {
+  background: #f8ece8;
+}
+
+.sudoku-page .metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.6rem;
+  margin-bottom: 1rem;
+}
+
+.sudoku-page .metrics div {
+  border: 1px solid color-mix(in srgb, var(--line), white 80%);
+  border-radius: 12px;
+  padding: 0.55rem 0.7rem;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  background: #fcfdfb;
+}
+
+.sudoku-page .metrics span {
+  font-size: 0.72rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sudoku-page .metrics strong {
+  font-size: 1.05rem;
+}
+
+.sudoku-page .board-wrap {
+  display: grid;
+  place-items: center;
+}
+
+.sudoku-page .sudoku-grid {
+  width: min(88vw, 520px);
+  aspect-ratio: 1;
+  display: grid;
+  grid-template-columns: repeat(9, 1fr);
+  border: 3px solid var(--line-bold);
+  border-radius: 16px;
   overflow: hidden;
-  background: #16213e;
+  background: #f6fbff;
 }
-.row {
-  display: flex;
-}
-.cell {
-  width: 36px;
-  height: 36px;
-  border: 1px solid #2a2a4a;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  box-sizing: border-box;
-}
-.cell.thick-right {
-  border-right-width: 2px;
-}
-.row.thick-bottom .cell {
-  border-bottom-width: 2px;
-}
-.input {
-  width: 100%;
-  height: 100%;
-  border: none;
-  background: transparent;
-  color: #eee;
-  font-size: 1rem;
-  text-align: center;
-  padding: 0;
-}
-.input:focus {
-  outline: none;
-  background: rgba(255, 255, 255, 0.08);
-}
-.fixed-num {
+
+.sudoku-page .cell {
+  border: 1px solid color-mix(in srgb, var(--line), white 55%);
+  background: #fdfefe;
+  color: var(--text);
+  font-size: clamp(1.1rem, 2.4vw, 1.55rem);
   font-weight: 600;
-  color: #aab;
-}
-.cell.error .input,
-.cell.error .fixed-num {
-  color: #f66;
-}
-.actions {
-  display: flex;
-  gap: 1rem;
-  align-items: center;
-}
-.actions button {
-  padding: 0.4rem 0.8rem;
-  background: #4a4a6a;
-  color: #eee;
-  border: none;
-  border-radius: 4px;
+  display: grid;
+  place-items: center;
   cursor: pointer;
+  padding: 0;
+  transition: background 140ms ease, color 140ms ease;
 }
-.actions button:hover {
-  background: #5a5a7a;
+
+.sudoku-page .cell:nth-child(3n):not(:nth-child(9n)) {
+  border-right: 2px solid var(--line-bold);
 }
-.toggle {
-  display: flex;
-  align-items: center;
-  gap: 0.4rem;
-  font-size: 0.9rem;
-  cursor: pointer;
+
+.sudoku-page .cell:nth-child(n + 19):nth-child(-n + 27),
+.sudoku-page .cell:nth-child(n + 46):nth-child(-n + 54) {
+  border-bottom: 2px solid var(--line-bold);
+}
+
+.sudoku-page .cell.given {
+  font-weight: 800;
+  color: #0e3a50;
+  background: #f1f8fd;
+}
+
+.sudoku-page .cell.related {
+  background: #eef5f9;
+}
+
+.sudoku-page .cell.matching {
+  background: #e6f0ff;
+}
+
+.sudoku-page .cell.selected {
+  background: #d7f0f1;
+  color: #0a3448;
+}
+
+.sudoku-page .cell.conflict {
+  background: #ffe3e0;
+}
+
+.sudoku-page .cell.wrong:not(.given) {
+  color: #b23a2f;
+}
+
+.sudoku-page .cell:focus-visible,
+.sudoku-page .chip:focus-visible,
+.sudoku-page .new-game:focus-visible,
+.sudoku-page .solve-button:focus-visible,
+.sudoku-page .cancel-button:focus-visible,
+.sudoku-page .numpad button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--focus), white 20%);
+  outline-offset: 2px;
+}
+
+.sudoku-page .numpad {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.sudoku-page .numpad button {
+  min-height: 2.65rem;
+  background: #f4f7f8;
+}
+
+.sudoku-page .numpad .erase {
+  grid-column: span 2;
+  background: #fff0e4;
+}
+
+.sudoku-page .chip:hover,
+.sudoku-page .new-game:hover,
+.sudoku-page .solve-button:hover,
+.sudoku-page .cancel-button:hover,
+.sudoku-page .numpad button:hover {
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, var(--line), white 40%);
+}
+
+.sudoku-page .chip:disabled,
+.sudoku-page .new-game:disabled,
+.sudoku-page .solve-button:disabled,
+.sudoku-page .cancel-button:disabled,
+.sudoku-page .numpad button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
+@keyframes reveal {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes floaty {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(18px);
+  }
+}
+
+@media (max-width: 720px) {
+  .sudoku-page .game-card {
+    padding: 0.95rem;
+    border-radius: 18px;
+  }
+
+  .sudoku-page .toolbar {
+    flex-wrap: wrap;
+  }
+
+  .sudoku-page .difficulty-group {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sudoku-page .toolbar-actions {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+
+  .sudoku-page .new-game,
+  .sudoku-page .solve-button,
+  .sudoku-page .cancel-button {
+    width: 100%;
+  }
+
+  .sudoku-page .metrics {
+    gap: 0.45rem;
+  }
+
+  .sudoku-page .numpad {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 </style>
