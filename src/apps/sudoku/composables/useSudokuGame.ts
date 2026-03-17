@@ -1,5 +1,6 @@
 import { computed, ref } from 'vue'
 import { DEFAULT_SOLVE_TIMEOUT_MS, DIFFICULTY_CLUES } from '../config/game'
+import { SUDOKU_PRESETS } from '../config/presets'
 import { outcomeLabel } from '../services/solveOutcome'
 import { SolverClient } from '../services/solverClient'
 import { carvePuzzle, createSolvedGrid } from '../services/sudokuSolver'
@@ -13,14 +14,19 @@ import {
 } from '../services/sudokuValidation'
 import type { CellPosition, CellViewModel, Difficulty, Grid, SolveOutcome } from '../types/sudoku'
 
+type SudokuMode = 'game' | 'edit-solve'
+
 const sameBox = (aRow: number, aCol: number, bRow: number, bCol: number): boolean =>
   Math.floor(aRow / 3) === Math.floor(bRow / 3) && Math.floor(aCol / 3) === Math.floor(bCol / 3)
 
 export const useSudokuGame = () => {
+  const mode = ref<SudokuMode>('game')
   const difficulty = ref<Difficulty>('medium')
   const puzzle = ref<Grid>([])
   const solution = ref<Grid>([])
   const board = ref<Grid>([])
+  const selectedPresetId = ref<string>('medium-1')
+  const lockGivenCells = ref(true)
 
   const selectedCell = ref<CellPosition | null>(null)
   const mistakes = ref(0)
@@ -34,7 +40,19 @@ export const useSudokuGame = () => {
   let timer: number | null = null
   let solveToken = 0
 
-  const isGiven = (row: number, col: number): boolean => puzzle.value[row]?.[col] !== 0
+  const presets = computed(() => SUDOKU_PRESETS)
+  const filteredPresets = computed(() => presets.value.filter((item) => item.difficulty === difficulty.value))
+  const isEditSolveMode = computed(() => mode.value === 'edit-solve')
+
+  const ensureSelectedPreset = () => {
+    const inDifficulty = filteredPresets.value.some((item) => item.id === selectedPresetId.value)
+    if (!inDifficulty) {
+      selectedPresetId.value = filteredPresets.value[0]?.id ?? presets.value[0]?.id ?? ''
+    }
+  }
+
+  const isGiven = (row: number, col: number): boolean =>
+    lockGivenCells.value && puzzle.value[row]?.[col] !== 0
 
   const currentSelectedValue = computed(() => {
     if (!selectedCell.value) return 0
@@ -56,6 +74,9 @@ export const useSudokuGame = () => {
   })
 
   const statusMessage = computed(() => {
+    if (mode.value === 'edit-solve' && !lockGivenCells.value) {
+      return 'Edit values freely, then run solver.'
+    }
     if (isComplete.value) return 'Solved. Start a new board or change difficulty.'
     if (mistakes.value >= 10) return '10+ mistakes. Keep going or generate a new board.'
     return outcomeLabel[lastSolveOutcome.value]
@@ -116,15 +137,55 @@ export const useSudokuGame = () => {
   }
 
   const newGame = () => {
+    ensureSelectedPreset()
+    const preset = presets.value.find((item) => item.id === selectedPresetId.value)
+    if (preset) {
+      puzzle.value = cloneGrid(preset.puzzle)
+      solution.value = cloneGrid(preset.solution)
+      board.value = cloneGrid(preset.puzzle)
+    } else {
+      const solved = createSolvedGrid()
+      const nextPuzzle = carvePuzzle(solved, DIFFICULTY_CLUES[difficulty.value])
+      puzzle.value = nextPuzzle
+      solution.value = solved
+      board.value = cloneGrid(nextPuzzle)
+    }
+
+    lockGivenCells.value = true
+    selectedCell.value = null
+    mistakes.value = 0
+    lastSolveOutcome.value = 'idle'
+    startTimer()
+  }
+
+  const loadSelectedPreset = () => {
+    ensureSelectedPreset()
+    newGame()
+  }
+
+  const startRandomEditBoard = () => {
     cancelSolve(false)
 
     const solved = createSolvedGrid()
     const nextPuzzle = carvePuzzle(solved, DIFFICULTY_CLUES[difficulty.value])
-
     puzzle.value = nextPuzzle
     solution.value = solved
     board.value = cloneGrid(nextPuzzle)
 
+    lockGivenCells.value = true
+    selectedCell.value = null
+    mistakes.value = 0
+    lastSolveOutcome.value = 'idle'
+    startTimer()
+  }
+
+  const startManualEditBoard = () => {
+    cancelSolve(false)
+    puzzle.value = Array.from({ length: 9 }, () => Array.from({ length: 9 }, () => 0))
+    solution.value = []
+    board.value = cloneGrid(puzzle.value)
+
+    lockGivenCells.value = false
     selectedCell.value = null
     mistakes.value = 0
     lastSolveOutcome.value = 'idle'
@@ -200,6 +261,7 @@ export const useSudokuGame = () => {
     isSolving.value = false
 
     if (result.status === 'success' && result.solution) {
+      solution.value = cloneGrid(result.solution)
       if (!matchesClues(result.solution, puzzle.value)) {
         lastSolveOutcome.value = 'invalid'
         return
@@ -214,9 +276,26 @@ export const useSudokuGame = () => {
 
   const setDifficulty = (value: Difficulty) => {
     difficulty.value = value
+    ensureSelectedPreset()
+    if (mode.value === 'game') {
+      newGame()
+    }
+  }
+
+  const setMode = (value: SudokuMode) => {
+    mode.value = value
+    if (value === 'game') {
+      newGame()
+    }
+  }
+
+  const setSelectedPreset = (id: string) => {
+    selectedPresetId.value = id
   }
 
   const initGame = () => {
+    mode.value = 'game'
+    ensureSelectedPreset()
     newGame()
   }
 
@@ -231,18 +310,27 @@ export const useSudokuGame = () => {
     clearSelected,
     difficulty,
     elapsedSeconds,
+    filteredPresets,
     filledCells,
     formatTime,
     initGame,
+    isEditSolveMode,
     isComplete,
     isSolving,
     lastSolveOutcome,
     mistakes,
+    mode,
     newGame,
     onKeyDown,
+    loadSelectedPreset,
     selectCell,
+    selectedPresetId,
+    setMode,
+    setSelectedPreset,
     setDifficulty,
     solveBoard,
+    startManualEditBoard,
+    startRandomEditBoard,
     statusMessage,
     cancelSolve,
     applyValue,

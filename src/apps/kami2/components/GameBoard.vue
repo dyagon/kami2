@@ -129,7 +129,6 @@ const handleCellClick = (c: number, r: number) => {
   display: flex;
   justify-content: center;
   align-items: center;
-  background: #e8e8e8;
 }
 
 .game-svg {

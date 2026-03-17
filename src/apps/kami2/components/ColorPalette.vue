@@ -7,9 +7,13 @@
       </button>
     </div>
 
-    <div class="color-palette-items">
+    <div
+      class="color-palette-items"
+      :class="{ 'vertical-layout': props.layout === 'vertical' }"
+    >
       <!-- 空白选项 -->
       <div
+        v-if="props.showEmpty"
         :class="[
           'color-swatch',
           'empty-swatch',
@@ -23,7 +27,11 @@
       <template v-for="(color, index) in colors" :key="index">
         <div
           :style="{ backgroundColor: color }"
-          :class="['color-swatch', { active: selectedColorIndex === index }]"
+          :class="[
+            'color-swatch',
+            { active: selectedColorIndex === index },
+            { 'vertical-swatch': props.layout === 'vertical' },
+          ]"
           @click="handleColorClick(index)"
           :title="`颜色 ${index + 1} (按 ${index + 1} 键选择)`"
         />
@@ -88,7 +96,20 @@ import {
 const gameStore = useGameStore();
 const { t } = useI18n();
 
-const canEdit = computed(() => gameStore.mode === "EDIT");
+const props = withDefaults(
+  defineProps<{
+    layout?: "grid" | "vertical";
+    showEmpty?: boolean;
+    allowPicker?: boolean;
+  }>(),
+  {
+    layout: "grid",
+    showEmpty: true,
+    allowPicker: true,
+  }
+);
+
+const canEdit = computed(() => gameStore.mode === "EDIT" && props.allowPicker);
 const colors = computed(() => gameStore.paletteColors);
 const selectedColorIndex = computed(() => gameStore.selectedColorIndex);
 
@@ -151,18 +172,20 @@ const handleColorClick = (index: number) => {
 }
 
 .open-picker-btn {
-  padding: 8px 14px;
+  padding: 0.55rem 1rem;
   font-size: 0.9rem;
-  background: #f0f0f0;
-  color: #333;
-  border: 1px solid #ccc;
-  border-radius: 6px;
+  background: linear-gradient(90deg, #ffe5d4, #ffc9a3);
+  color: #102233;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  font-weight: 700;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: transform 120ms ease, border-color 180ms ease, background 180ms ease;
 }
 
 .open-picker-btn:hover {
-  background: #e0e0e0;
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #254a61, white 40%);
 }
 
 .color-palette-items {
@@ -170,6 +193,13 @@ const handleColorClick = (index: number) => {
   flex-wrap: wrap;
   align-items: center;
   gap: 8px;
+}
+
+.color-palette-items.vertical-layout {
+  flex-direction: column;
+  align-items: stretch;
+  flex-wrap: nowrap;
+  gap: 10px;
 }
 
 .color-swatch {
@@ -181,8 +211,16 @@ const handleColorClick = (index: number) => {
   transition: transform 0.2s;
 }
 
+.vertical-swatch {
+  width: 100%;
+  min-width: 120px;
+  height: 42px;
+  border-radius: 10px;
+  border: 2px solid color-mix(in srgb, #254a61, white 70%);
+}
+
 .color-swatch.active {
-  border-color: #333;
+  border-color: #0f2f43;
   transform: scale(1.1);
 }
 
@@ -223,8 +261,9 @@ const handleColorClick = (index: number) => {
 }
 
 .picker-modal {
-  background: #fff;
-  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.96);
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, #254a61, white 80%);
   padding: 20px;
   min-width: 280px;
   max-width: 90vw;
@@ -237,7 +276,7 @@ const handleColorClick = (index: number) => {
 .picker-title {
   font-size: 1rem;
   font-weight: 600;
-  color: #333;
+  color: #102233;
   margin-bottom: 16px;
 }
 
@@ -301,8 +340,8 @@ const handleColorClick = (index: number) => {
 }
 
 .picker-btn.cancel {
-  background: #eee;
-  color: #333;
+  background: #edf2f5;
+  color: #102233;
 }
 
 .picker-btn.cancel:hover {
@@ -310,8 +349,8 @@ const handleColorClick = (index: number) => {
 }
 
 .picker-btn.confirm {
-  background: #4ecdc4;
-  color: white;
+  background: linear-gradient(90deg, #daf4ff, #bde8ff);
+  color: #102233;
 }
 
 .picker-btn.confirm:hover {

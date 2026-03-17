@@ -126,8 +126,9 @@ const handleStepClick = (index: number) => {
 
 .solve-info {
   padding: 12px;
-  background: #fff;
-  border-radius: 4px;
+  background: #fcfdfb;
+  border: 1px solid color-mix(in srgb, #254a61, white 80%);
+  border-radius: 12px;
   font-size: 0.9rem;
   display: flex;
   flex-direction: column;
@@ -136,16 +137,16 @@ const handleStepClick = (index: number) => {
 
 .info-title {
   font-weight: 600;
-  color: #333;
+  color: #102233;
   margin-bottom: 4px;
 }
 
 .info-row {
-  color: #333;
+  color: #102233;
 }
 
 .info-label {
-  color: #666;
+  color: #4f6270;
   margin-right: 4px;
 }
 
@@ -155,18 +156,20 @@ const handleStepClick = (index: number) => {
 }
 
 .solve-button {
-  padding: 8px 16px;
-  background-color: #4ECDC4;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  padding: 0.55rem 1rem;
+  background: linear-gradient(90deg, #daf4ff, #bde8ff);
+  color: #102233;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  font-weight: 700;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: background-color 0.2s;
+  transition: transform 120ms ease, border-color 180ms ease, background 180ms ease;
 }
 
 .solve-button:hover:not(:disabled) {
-  background-color: #3db8ab;
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #254a61, white 40%);
 }
 
 .solve-button:disabled {
@@ -175,26 +178,29 @@ const handleStepClick = (index: number) => {
 }
 
 .terminate-button {
-  padding: 8px 16px;
-  background-color: #f44336;
-  color: white;
-  border: none;
-  border-radius: 4px;
+  padding: 0.55rem 1rem;
+  background: #f8ece8;
+  color: #102233;
+  border: 2px solid transparent;
+  border-radius: 999px;
+  font-weight: 700;
   cursor: pointer;
   font-size: 0.9rem;
-  transition: background-color 0.2s;
+  transition: transform 120ms ease, border-color 180ms ease, background 180ms ease;
 }
 
 .terminate-button:hover {
-  background-color: #d32f2f;
+  transform: translateY(-1px);
+  border-color: color-mix(in srgb, #254a61, white 40%);
 }
 
 .solution-path {
   margin-top: 16px;
   margin-bottom: 20px;
   padding: 12px;
-  background: #fff;
-  border-radius: 4px;
+  background: #fcfdfb;
+  border: 1px solid color-mix(in srgb, #254a61, white 80%);
+  border-radius: 12px;
   font-size: 0.85rem;
 }
 
@@ -207,12 +213,12 @@ const handleStepClick = (index: number) => {
 
 .solution-title {
   font-weight: 600;
-  color: #333;
+  color: #102233;
 }
 
 .solution-steps-count {
   font-weight: 600;
-  color: #4ECDC4;
+  color: #4f6270;
   font-size: 0.9rem;
 }
 
@@ -231,8 +237,8 @@ const handleStepClick = (index: number) => {
 }
 
 .solution-step.active {
-  background-color: #e3f2fd;
-  border: 1px solid #2196f3;
+  background-color: #e6f0ff;
+  border: 1px solid color-mix(in srgb, #254a61, white 55%);
 }
 
 .step-content {
@@ -243,7 +249,7 @@ const handleStepClick = (index: number) => {
 
 .step-number {
   font-weight: 600;
-  color: #333;
+  color: #102233;
 }
 
 .step-color-swatch {

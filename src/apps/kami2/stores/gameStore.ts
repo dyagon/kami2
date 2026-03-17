@@ -4,6 +4,7 @@ import { GameGrid, EMPTY_COLOR_INDEX } from '../core/GameGrid'
 import { type Solution } from '../core/GraphSolver'
 import { SolverClient } from '../core/SolverClient'
 import { GraphBuilder } from '../core/GraphBuilder'
+import { KAMI2_LEVELS, getKami2LevelById } from '../core/levels'
 
 /** 选中空白时的 selectedColorIndex 值 */
 export const EMPTY_SELECTION_INDEX = -1
@@ -24,9 +25,15 @@ const EDIT_STORAGE_KEY = 'kami2-edit-grid'
 
 const solverClient = new SolverClient()
 
+const createRandomGrid = (rows: number, cols: number, colorCount: number): number[][] =>
+  Array.from({ length: rows }, () =>
+    Array.from({ length: cols }, () => Math.floor(Math.random() * colorCount))
+  )
+
 export const useGameStore = defineStore('game', () => {
   // 游戏模式：EDIT 编辑 / PLAY 测试
   const mode = ref<'EDIT' | 'PLAY'>('EDIT')
+  const selectedLevelId = ref<string>(KAMI2_LEVELS[0]?.id ?? '')
 
   // 颜色选择（使用索引）
   const selectedColorIndex = ref<number>(0)
@@ -57,6 +64,44 @@ export const useGameStore = defineStore('game', () => {
   let blinkTimer: ReturnType<typeof setInterval> | null = null
   let editGraphInfoTimer: ReturnType<typeof setTimeout> | null = null
 
+  const clearSolveState = () => {
+    solution.value = null
+    solutionMetadata.value = null
+    selectedStepIndex.value = null
+    highlightCells.value = []
+    initialGameGridForSolution.value = null
+    if (blinkTimer !== null) {
+      clearInterval(blinkTimer)
+      blinkTimer = null
+    }
+    isBlinking.value = false
+  }
+
+  const clearEditGraphInfoTimer = () => {
+    if (editGraphInfoTimer !== null) {
+      clearTimeout(editGraphInfoTimer)
+      editGraphInfoTimer = null
+    }
+  }
+
+  const refreshGraphInfo = (grid: GameGrid) => {
+    clearEditGraphInfoTimer()
+    editGraphInfoTimer = globalThis.setTimeout(() => {
+      try {
+        const builder = new GraphBuilder(grid, EMPTY_COLOR_INDEX)
+        const islands = builder.buildIslands()
+        const islandCount = islands.length
+        const regionCount = islands.reduce((sum, isl) => sum + isl.size, 0)
+        const perIslandSizes = islands.map((isl) => isl.size)
+        graphInfo.value = { islandCount, regionCount, perIslandSizes }
+      } catch (error) {
+        console.error('计算图信息失败：', error)
+        graphInfo.value = null
+      }
+      editGraphInfoTimer = null
+    }, 200)
+  }
+
   // 计算属性
   const regionCount = computed(() => {
     if (mode.value === 'EDIT' || !gameGrid.value) {
@@ -64,6 +109,12 @@ export const useGameStore = defineStore('game', () => {
     }
     return gameGrid.value.getRegionCells(0, 0).length
   })
+
+  const kamiLevels = computed(() => KAMI2_LEVELS)
+  const selectedLevelIndex = computed(() =>
+    Math.max(0, kamiLevels.value.findIndex((level) => level.id === selectedLevelId.value))
+  )
+  const isLevelCleared = computed(() => mode.value === 'PLAY' && (graphInfo.value?.regionCount ?? 0) <= 1)
   
   // 获取当前选中的颜色字符串（用于向后兼容），空白返回特殊标记
   const selectedColor = computed(() => {
@@ -112,19 +163,64 @@ export const useGameStore = defineStore('game', () => {
     if (loaded) {
       gameGrid.value = markRaw(loaded)
       stepCount.value = 0
-      solution.value = null
-      selectedStepIndex.value = null
-      highlightCells.value = []
-      initialGameGridForSolution.value = null
-      solutionMetadata.value = null
+      clearSolveState()
       graphInfo.value = null
-      if (blinkTimer !== null) {
-        clearInterval(blinkTimer)
-        blinkTimer = null
-      }
-      isBlinking.value = false
+      refreshGraphInfo(loaded)
     } else {
       initGrid()
+    }
+  }
+
+  const applyLevel = (levelId: string, targetMode: 'EDIT' | 'PLAY') => {
+    const level = getKami2LevelById(levelId) ?? KAMI2_LEVELS[0]
+    if (!level) return
+    selectedLevelId.value = level.id
+    const palette = [...DEFAULT_COLORS.slice(0, Math.max(1, level.colorCount))]
+    paletteColors.value = palette
+
+    const nextGrid = markRaw(
+      new GameGrid(VSIDE_ROWS, COLS, palette.length, level.grid.map((row) => [...row]))
+    )
+    gameGrid.value = nextGrid
+    stepCount.value = 0
+    selectedColorIndex.value = 0
+    clearSolveState()
+
+    if (targetMode === 'EDIT') {
+      saveEditState()
+    }
+    refreshGraphInfo(nextGrid)
+  }
+
+  const loadSelectedLevelToEdit = () => {
+    mode.value = 'EDIT'
+    applyLevel(selectedLevelId.value, 'EDIT')
+  }
+
+  const loadSelectedLevelToPlay = () => {
+    mode.value = 'PLAY'
+    applyLevel(selectedLevelId.value, 'PLAY')
+  }
+
+  const randomizeEditGrid = () => {
+    mode.value = 'EDIT'
+    const colorCount = Math.max(1, Math.min(6, paletteColors.value.length || 5))
+    paletteColors.value = [...DEFAULT_COLORS.slice(0, colorCount)]
+    const randomGrid = createRandomGrid(2 * VSIDE_ROWS + 1, COLS, colorCount)
+    const next = markRaw(new GameGrid(VSIDE_ROWS, COLS, colorCount, randomGrid))
+    gameGrid.value = next
+    stepCount.value = 0
+    selectedColorIndex.value = 0
+    clearSolveState()
+    saveEditState()
+    refreshGraphInfo(next)
+  }
+
+  const resetForCurrentMode = () => {
+    if (mode.value === 'PLAY') {
+      applyLevel(selectedLevelId.value, 'PLAY')
+    } else {
+      loadEditStateOrInit()
     }
   }
 
@@ -133,35 +229,9 @@ export const useGameStore = defineStore('game', () => {
     mode.value = newMode
     if (newMode === 'EDIT') {
       loadEditStateOrInit()
-      // 编辑模式下，如果已有 grid，立即计算图信息
-      if (gameGrid.value) {
-        if (editGraphInfoTimer !== null) {
-          clearTimeout(editGraphInfoTimer)
-        }
-        editGraphInfoTimer = globalThis.setTimeout(() => {
-          if (gameGrid.value && mode.value === 'EDIT') {
-            try {
-              const builder = new GraphBuilder(gameGrid.value, EMPTY_COLOR_INDEX)
-              const islands = builder.buildIslands()
-              const islandCount = islands.length
-              const regionCount = islands.reduce((sum, isl) => sum + isl.size, 0)
-              const perIslandSizes = islands.map((isl) => isl.size)
-              graphInfo.value = { islandCount, regionCount, perIslandSizes }
-            } catch (error) {
-              console.error('计算图信息失败：', error)
-              graphInfo.value = null
-            }
-          }
-          editGraphInfoTimer = null
-        }, 200)
-      }
+      if (gameGrid.value) refreshGraphInfo(gameGrid.value)
     } else {
-      // 切换到测试模式时，清除编辑模式的图信息
-      if (editGraphInfoTimer !== null) {
-        clearTimeout(editGraphInfoTimer)
-        editGraphInfoTimer = null
-      }
-      graphInfo.value = null
+      applyLevel(selectedLevelId.value, 'PLAY')
     }
   }
   
@@ -184,29 +254,15 @@ export const useGameStore = defineStore('game', () => {
   const setGameGrid = (newGameGrid: GameGrid) => {
     gameGrid.value = markRaw(newGameGrid)
     saveEditState()
-    
-    // 编辑模式下，实时计算图信息（防抖200ms）
-    if (mode.value === 'EDIT') {
-      if (editGraphInfoTimer !== null) {
-        clearTimeout(editGraphInfoTimer)
-      }
-      editGraphInfoTimer = globalThis.setTimeout(() => {
-        if (newGameGrid && mode.value === 'EDIT') {
-          try {
-            const builder = new GraphBuilder(newGameGrid, EMPTY_COLOR_INDEX)
-            const islands = builder.buildIslands()
-            const islandCount = islands.length
-            const regionCount = islands.reduce((sum, isl) => sum + isl.size, 0)
-            const perIslandSizes = islands.map((isl) => isl.size)
-            graphInfo.value = { islandCount, regionCount, perIslandSizes }
-          } catch (error) {
-            console.error('计算图信息失败：', error)
-            graphInfo.value = null
-          }
-        }
-        editGraphInfoTimer = null
-      }, 200)
-    }
+    refreshGraphInfo(newGameGrid)
+  }
+
+  const goToNextLevel = () => {
+    const levels = kamiLevels.value
+    if (!levels.length) return
+    const nextIndex = (selectedLevelIndex.value + 1) % levels.length
+    selectedLevelId.value = levels[nextIndex].id
+    loadSelectedLevelToPlay()
   }
 
 
@@ -260,12 +316,9 @@ export const useGameStore = defineStore('game', () => {
     highlightCells.value = []
     initialGameGridForSolution.value = null
     selectedColorIndex.value = 0
-    if (blinkTimer !== null) {
-      clearInterval(blinkTimer)
-      blinkTimer = null
-    }
-    isBlinking.value = false
+    clearSolveState()
     saveEditState()
+    refreshGraphInfo(gameGrid.value)
   }
   
   // 求解函数：使用 Worker 异步求解，进度通过 SolverClient 直接打印并更新 UI
@@ -378,15 +431,8 @@ export const useGameStore = defineStore('game', () => {
   
   // 清理函数
   const cleanup = () => {
-    if (blinkTimer !== null) {
-      clearInterval(blinkTimer)
-      blinkTimer = null
-    }
-    if (editGraphInfoTimer !== null) {
-      clearTimeout(editGraphInfoTimer)
-      editGraphInfoTimer = null
-    }
-    isBlinking.value = false
+    clearSolveState()
+    clearEditGraphInfoTimer()
   }
 
     return {
@@ -407,6 +453,9 @@ export const useGameStore = defineStore('game', () => {
     selectedStepIndex,
     highlightCells,
     isBlinking,
+    selectedLevelId,
+    kamiLevels,
+    isLevelCleared,
 
     // Computed
     regionCount,
@@ -422,6 +471,11 @@ export const useGameStore = defineStore('game', () => {
     resetStepCount,
     initGrid,
     loadEditStateOrInit,
+    loadSelectedLevelToEdit,
+    loadSelectedLevelToPlay,
+    randomizeEditGrid,
+    resetForCurrentMode,
+    goToNextLevel,
     solvePuzzle,
     terminateSolve,
     selectStep,

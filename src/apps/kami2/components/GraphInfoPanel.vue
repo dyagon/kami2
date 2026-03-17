@@ -1,5 +1,5 @@
 <template>
-  <div v-if="gameStore.mode === 'EDIT'" class="graph-info-panel">
+  <div class="graph-info-panel">
     <div class="info-title">{{ t('kami2.graphInfoTitle') }}</div>
     <template v-if="gameStore.graphInfo">
       <div class="info-row">
@@ -37,8 +37,9 @@ const islandSizesText = computed(() => {
 <style scoped>
 .graph-info-panel {
   padding: 12px;
-  background: #fff;
-  border-radius: 4px;
+  background: #fcfdfb;
+  border: 1px solid color-mix(in srgb, #254a61, white 80%);
+  border-radius: 12px;
   font-size: 0.9rem;
   display: flex;
   flex-direction: column;
@@ -47,16 +48,16 @@ const islandSizesText = computed(() => {
 
 .info-title {
   font-weight: 600;
-  color: #333;
+  color: #102233;
   margin-bottom: 4px;
 }
 
 .info-row {
-  color: #333;
+  color: #102233;
 }
 
 .info-label {
-  color: #666;
+  color: #4f6270;
   margin-right: 4px;
 }
 
@@ -68,7 +69,7 @@ const islandSizesText = computed(() => {
 
 .island-sizes {
   font-size: 0.85rem;
-  color: #555;
+  color: #4f6270;
   word-break: break-all;
 }
 

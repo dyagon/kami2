@@ -1,10 +1,10 @@
 <template>
   <div class="app">
-    <header class="nav-header">
+    <header v-if="!hideHeader" class="nav-header">
       <h1 class="title">{{ t('app.title') }}</h1>
       <nav class="nav">
         <router-link to="/">{{ t('nav.home') }}</router-link>
-        <router-link to="/kami2">{{ t('nav.kami2') }}</router-link>
+        <router-link to="/kami2/play">{{ t('nav.kami2') }}</router-link>
         <router-link to="/sudoku">{{ t('nav.sudoku') }}</router-link>
       </nav>
       <div class="lang-switch">
@@ -31,9 +31,14 @@
 </template>
 
 <script setup lang="ts">
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 
+const route = useRoute()
 const { t, locale } = useI18n()
+
+const hideHeader = computed(() => route.meta?.hideHeader === true)
 
 const changeLocale = (lang: 'en' | 'zh') => {
   locale.value = lang

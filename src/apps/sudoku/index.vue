@@ -15,16 +15,25 @@ const {
   clearSelected,
   difficulty,
   dispose,
+  filteredPresets,
   filledCells,
   formatTime,
   initGame,
+  isEditSolveMode,
   isSolving,
   mistakes,
+  mode,
+  loadSelectedPreset,
   newGame,
   onKeyDown,
   selectCell,
+  selectedPresetId,
+  setMode,
+  setSelectedPreset,
   setDifficulty,
   solveBoard,
+  startManualEditBoard,
+  startRandomEditBoard,
   statusMessage,
 } = game
 
@@ -52,6 +61,19 @@ onBeforeUnmount(() => {
       </header>
 
       <section class="toolbar">
+        <div class="mode-group" role="group" aria-label="Mode">
+          <button class="chip" :class="{ active: mode === 'game' }" @click="setMode('game')">
+            Game
+          </button>
+          <button
+            class="chip"
+            :class="{ active: mode === 'edit-solve' }"
+            @click="setMode('edit-solve')"
+          >
+            Edit + Solve
+          </button>
+        </div>
+
         <div class="difficulty-group" role="group" aria-label="Difficulty">
           <button
             v-for="level in levels"
@@ -66,13 +88,30 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="toolbar-actions">
-          <button class="new-game" @click="newGame">New Board</button>
+          <button class="new-game" @click="newGame">Reset</button>
           <button class="solve-button" :disabled="isSolving" @click="solveBoard">
             {{ isSolving ? 'Solving...' : 'Solve' }}
           </button>
           <button class="cancel-button" :disabled="!isSolving" @click="() => cancelSolve()">
             Cancel
           </button>
+        </div>
+      </section>
+
+      <section v-if="isEditSolveMode" class="editor-panel">
+        <select
+          class="level-select"
+          :value="selectedPresetId"
+          @change="setSelectedPreset(($event.target as HTMLSelectElement).value)"
+        >
+          <option v-for="preset in filteredPresets" :key="preset.id" :value="preset.id">
+            {{ preset.name }}
+          </option>
+        </select>
+        <div class="editor-actions">
+          <button class="chip" @click="loadSelectedPreset">Load Preset</button>
+          <button class="chip" @click="startRandomEditBoard">Random</button>
+          <button class="chip" @click="startManualEditBoard">Manual</button>
         </div>
       </section>
 
@@ -216,7 +255,34 @@ onBeforeUnmount(() => {
   gap: 0.45rem;
 }
 
+.sudoku-page .mode-group {
+  display: flex;
+  gap: 0.45rem;
+}
+
 .sudoku-page .toolbar-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.sudoku-page .editor-panel {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  margin-bottom: 0.85rem;
+}
+
+.sudoku-page .level-select {
+  flex: 1;
+  min-width: 220px;
+  border: 1px solid color-mix(in srgb, var(--line), white 65%);
+  border-radius: 10px;
+  background: #fff;
+  padding: 0.5rem 0.7rem;
+  color: var(--text);
+}
+
+.sudoku-page .editor-actions {
   display: flex;
   gap: 0.45rem;
 }
@@ -433,6 +499,11 @@ onBeforeUnmount(() => {
   }
 
   .sudoku-page .difficulty-group {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .sudoku-page .mode-group {
     width: 100%;
     justify-content: center;
   }
